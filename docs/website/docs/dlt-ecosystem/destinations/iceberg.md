@@ -314,6 +314,36 @@ When both destination-level and per-table properties are set, they are merged. P
 Table properties are only applied at table creation time. If the table already exists, the properties are ignored.
 :::
 
+### Format version
+
+dlt does not select the Iceberg [format version](https://iceberg.apache.org/spec/#format-versioning). It passes the merged properties unchanged to `pyiceberg`, which forwards them to your catalog's `create_table`, so the format version of a new table is decided by `pyiceberg` and the catalog at creation time.
+
+`pyiceberg` reads the `format-version` property while it builds the table and falls back to `2` when the property is absent. It consumes the key instead of storing it, so a created table has no `format-version` entry in its properties. Request a version like any other property:
+
+```py
+iceberg_adapter(
+    my_data,
+    table_properties={"format-version": "2", "write.format.default": "parquet"},
+)
+```
+
+To learn what the catalog actually created, read the format version from the `pyiceberg` table (see [table access helper functions](#table-access-helper-functions)):
+
+```py
+from dlt.common.libs.pyiceberg import get_iceberg_tables
+
+for table_name, iceberg_table in get_iceberg_tables(pipeline).items():
+    print(table_name, iceberg_table.metadata.format_version)
+```
+
+Since properties are applied only at creation, setting `format-version` again does not raise the version of a table that already exists, and `pyiceberg` refuses to upgrade a table past v2 in any case. Drop the table (see [table truncation and drop](#table-truncation-and-drop)) and let dlt recreate it, after you confirm that your catalog creates the version you want.
+
+:::caution Format version 3
+`pyiceberg` cannot write v3 table metadata yet: serializing it raises `NotImplementedError: Writing V3 is not yet supported` in 0.9.1, 0.10.0, and 0.11.1. Setting `"format-version": "3"` fails the load job with the `sql`, `glue`, and `hive` catalogs and with the ephemeral in-memory catalog, because `pyiceberg` writes the metadata file itself for all of them. The metadata file is created before serialization fails, so an empty `*.metadata.json` may be left in the table's `metadata` folder. Delete it before you retry, otherwise the next run fails while parsing that file.
+
+With a `rest` catalog, `pyiceberg` sends the properties in the create-table request and the catalog server builds the metadata, so honoring, ignoring, or rejecting `format-version` is up to that server and its version. Users have reported v2 tables from AWS Glue regardless of the property, and results from Polaris that depend on its server version and configuration. We have not verified either report. Read `metadata.format_version` back as shown above rather than assuming the property took effect.
+:::
+
 ## Namespace properties
 
 You can set properties on the Iceberg namespace (schema) via configuration. These are passed to the catalog when the namespace is first created.
