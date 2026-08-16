@@ -22,7 +22,7 @@ from dlt.common.configuration.specs.base_configuration import (
     BaseConfiguration,
     configspec,
 )
-from dlt.common.incremental.typing import TIncrementalRange
+from dlt.common.incremental.typing import OnCursorValueMissing, TIncrementalRange
 from dlt.common.json import json
 from dlt.common.pendulum import pendulum, timedelta
 from dlt.common.pipeline import NormalizeInfo, StateInjectableContext
@@ -922,6 +922,73 @@ def test_cursor_path_none_excludes_records_and_updates_incremental_cursor(
         "created_at"
     ]
     assert s["last_value"] == 2
+
+
+@pytest.mark.parametrize("item_type", ALL_TEST_DATA_ITEM_FORMATS)
+@pytest.mark.parametrize("on_cursor_value_missing", ["include", "exclude"])
+def test_cursor_path_none_in_all_records(
+    item_type: TestDataItemFormat, on_cursor_value_missing: OnCursorValueMissing
+) -> None:
+    # first page carries no cursor value at all, second page does
+    pages = [
+        [{"id": 1, "created_at": None}, {"id": 2, "created_at": None}],
+        [{"id": 3, "created_at": 1}],
+    ]
+    source_items = [data_to_item_format(item_type, page) for page in pages]
+
+    @dlt.resource
+    def some_data(
+        created_at=dlt.sources.incremental(
+            "created_at", on_cursor_value_missing=on_cursor_value_missing
+        )
+    ):
+        yield from source_items
+
+    p = dlt.pipeline(pipeline_name="p" + uniq_id())
+    p.run(some_data(), destination="duckdb")
+
+    assert_query_column(
+        p, "select count(id) from some_data", [3 if on_cursor_value_missing == "include" else 1]
+    )
+
+    s = p.state["sources"][p.default_schema_name]["resources"]["some_data"]["incremental"][
+        "created_at"
+    ]
+    assert s["last_value"] == 1
+
+
+@pytest.mark.parametrize("item_type", ALL_TEST_DATA_ITEM_FORMATS)
+@pytest.mark.parametrize("on_cursor_value_missing", ["include", "exclude"])
+def test_cursor_path_none_in_all_records_after_state(
+    item_type: TestDataItemFormat, on_cursor_value_missing: OnCursorValueMissing
+) -> None:
+    is_second_run = False
+
+    @dlt.resource
+    def some_data(
+        created_at=dlt.sources.incremental(
+            "created_at", on_cursor_value_missing=on_cursor_value_missing
+        )
+    ):
+        if is_second_run:
+            yield data_to_item_format(item_type, [{"id": 3, "created_at": None}])
+        else:
+            yield data_to_item_format(item_type, [{"id": 1, "created_at": 1}])
+
+    p = dlt.pipeline(pipeline_name="p" + uniq_id())
+    p.run(some_data(), destination="duckdb")
+    is_second_run = True
+    p.run(some_data(), destination="duckdb")
+
+    assert_query_column(
+        p, "select count(id) from some_data", [2 if on_cursor_value_missing == "include" else 1]
+    )
+
+    # a batch without any cursor value must not move the cursor established by the previous run
+    s = p.state["sources"][p.default_schema_name]["resources"]["some_data"]["incremental"][
+        "created_at"
+    ]
+    assert s["last_value"] == 1
 
 
 @pytest.mark.parametrize("item_type", ALL_TEST_DATA_ITEM_FORMATS)
