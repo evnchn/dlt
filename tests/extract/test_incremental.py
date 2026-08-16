@@ -3128,6 +3128,41 @@ def test_incremental_lag_int(lag: float, last_value_func) -> None:
         assert result == expected_results[int(lag)]
 
 
+@pytest.mark.parametrize("first_run_cursor", [0, 10])
+@pytest.mark.parametrize("last_value_func", [min, max])
+def test_incremental_lag_does_not_regress_falsy_last_value(
+    first_run_cursor: int, last_value_func
+) -> None:
+    """`last_value` of 0 must keep the forward-only progression that any other value gets."""
+
+    pipeline = dlt.pipeline(
+        pipeline_name="p" + uniq_id(),
+        destination=dlt.destinations.duckdb(credentials=duckdb.connect(":memory:")),
+    )
+    is_second_run = False
+    # the lagged bound moves down for max and up for min, so the filtered side flips too
+    filtered_out = first_run_cursor - 10 if last_value_func is max else first_run_cursor + 10
+
+    @dlt.resource(name="events", primary_key="id", write_disposition="append")
+    def events_resource(
+        _=dlt.sources.incremental("counter", lag=5, last_value_func=last_value_func)
+    ):
+        if is_second_run:
+            # outside the lagged bound, so nothing advances the cursor
+            yield {"id": 2, "counter": filtered_out}
+        else:
+            yield {"id": 1, "counter": first_run_cursor}
+
+    pipeline.run(events_resource)
+    is_second_run = True
+    pipeline.run(events_resource)
+
+    s = pipeline.state["sources"][pipeline.default_schema_name]["resources"]["events"][
+        "incremental"
+    ]["counter"]
+    assert s["last_value"] == first_run_cursor
+
+
 @pytest.mark.parametrize("lag", [7200, 3601, 3600, 60, 0])
 @pytest.mark.parametrize("last_value_func", [min, max])
 def test_incremental_lag_datetime_str(lag: float, last_value_func) -> None:
