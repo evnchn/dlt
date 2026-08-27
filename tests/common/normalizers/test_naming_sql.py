@@ -24,6 +24,11 @@ def test_normalize_identifier(convention: Type[NamingConvention]) -> None:
     assert naming.normalize_identifier("+-!$*@#=|:") == "_"
     # leave single underscore
     assert naming.normalize_identifier("_") == "_"
+    # identifiers made of underscores only contract, they never normalize to an empty identifier
+    assert naming.normalize_identifier("__") == "_"
+    assert naming.normalize_identifier("___") == "_"
+    assert naming.normalize_identifier("_-") == "_"
+    assert naming.normalize_identifier("_?") == "_"
     # some other cases
     assert naming.normalize_identifier("+1") == "_1"
     assert naming.normalize_identifier("-1") == "_1"

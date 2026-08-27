@@ -29,9 +29,13 @@ def test_flatten_fix_field_name(norm: RelationalNormalizer) -> None:
         "f-1": "!  30",
         "f 2": [],
         "f!3": {"f4": "a", "f-5": "b", "f*6": {"c": 7, "c v": 8, "c x": []}},
+        "__": "separator only",
     }
     flattened_row, lists = norm._flatten("mock_table", row, 1000)
     assert "f_1" in flattened_row
+    # a field named like the path separator does not flatten to an empty name
+    assert "" not in flattened_row
+    assert "xx" in flattened_row
     # assert "f_2" in flattened_row
     assert "f_3__f4" in flattened_row
     assert "f_3__f_5" in flattened_row
