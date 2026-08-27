@@ -228,6 +228,8 @@ def test_normalize_path_shorting(convention: Type[NamingConvention]) -> None:
 @pytest.mark.parametrize("convention", ALL_NAMING_CONVENTIONS)
 def test_normalize_path(convention: Type[NamingConvention]) -> None:
     naming = convention()
+    # a path built out of separators only must still yield an identifier
+    assert naming.normalize_path(convention.PATH_SEPARATOR) != ""
     raw_path_str = naming.make_path(*RAW_PATH)
     assert convention.PATH_SEPARATOR in raw_path_str
     # count separators
@@ -295,6 +297,11 @@ def test_normalize_break_path(convention: Type[NamingConvention]) -> None:
     assert naming_unlimited.break_path("_a_____b") == ["_a", "_b"]
     assert naming_unlimited.break_path("_a____b") == ["_a", "b"]
     assert naming_unlimited.break_path("_a__  \t\r__b") == ["_a", "b"]
+    # a path built out of separators only is a single identifier, not an empty path
+    assert naming_unlimited.break_path("__") == ["__"]
+    assert naming_unlimited.break_path("____") == ["____"]
+    # blank paths still break into nothing
+    assert naming_unlimited.break_path("  \t\r ") == []
 
 
 @pytest.mark.parametrize("convention", ALL_UNDERSCORE_PATH_CONVENTIONS)
