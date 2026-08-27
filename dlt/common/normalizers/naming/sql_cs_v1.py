@@ -17,7 +17,7 @@ class NamingConvention(BaseNamingConvention):
     - Spaces around identifier are trimmed
     - Removes all ascii characters except ascii alphanumerics and underscores
     - Prepends `_` if name starts with number.
-    - Removes all trailing underscores.
+    - Removes all trailing underscores, unless the identifier consists of underscores only.
     - Multiples of `_` are converted into single `_`.
     """
 
@@ -32,9 +32,11 @@ class NamingConvention(BaseNamingConvention):
         # remove leading digits
         if RE_LEADING_DIGITS.match(norm_identifier):
             norm_identifier = "_" + norm_identifier
-        # remove trailing underscores to not mess with how we break paths
-        if norm_identifier != "_":
-            norm_identifier = self.RE_ENDING_UNDERSCORES.sub("", norm_identifier)
+        # remove trailing underscores to not mess with how we break paths, but never
+        # let that empty an identifier that is made of underscores only
+        stripped_identifier = self.RE_ENDING_UNDERSCORES.sub("", norm_identifier)
+        if stripped_identifier:
+            norm_identifier = stripped_identifier
         # contract multiple __
         norm_identifier = self.RE_UNDERSCORES.sub("_", norm_identifier)
         return self.shorten_identifier(norm_identifier, identifier, self.max_length)
