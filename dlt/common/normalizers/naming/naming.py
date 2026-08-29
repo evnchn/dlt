@@ -51,7 +51,9 @@ class NamingConvention(ABC):
         """Breaks path into sequence of identifiers"""
         # TODO: this is no longer needed if we modify all naming convention to do not contract
         #   underscores then also normalize_path will not be needed
-        return [ident for ident in path.split(self.PATH_SEPARATOR) if ident.strip()]
+        idents = [ident for ident in path.split(self.PATH_SEPARATOR) if ident.strip()]
+        # a path of separators only is a single identifier, not an empty path
+        return idents or ([path] if path.strip() else [])
 
     def normalize_path(self, path: str) -> str:
         """Breaks path into identifiers, normalizes components, reconstitutes and shortens the path"""
